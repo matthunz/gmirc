@@ -7,20 +7,41 @@ fn main() {
 
     for stream in listener.incoming() {
         thread::spawn(move || {
-            handle_client(stream.unwrap());
+            let mut client = Client::new(stream.unwrap());
+            client.run();
         });
     }
 }
 
-fn handle_client(mut stream: TcpStream) {
-    loop {
-        let mut buffer = [0; 512];
-        stream.read(&mut buffer).unwrap();
+struct Client {
+    stream: TcpStream,
+    nick: String
+}
 
-        if stream.write("test\r\n".as_bytes()).is_err() {
-            break;
+impl Client {
+    fn new(stream: TcpStream) -> Client {
+        Client { stream: stream, nick: String::new() }
+    }
+
+    fn run(&mut self) {
+        loop {
+            let mut buffer = [0; 512];
+            self.stream.read(&mut buffer).unwrap();
+
+            let line = String::from_utf8(buffer.to_vec()).unwrap();
+            self.parse_command(&line);
+
+            let msg = format!(":gmirc 001 {0} :Welcome!\r {0}", self.nick);
+            if self.stream.write(msg.as_bytes()).is_err() {
+                break;
+            }
         }
+        self.nick = String::from("test2")
+    }
 
-        println!("{}", String::from_utf8_lossy(&buffer[..]))
+    fn parse_command(&mut self, line: &str) {
+        if line.contains("NICK") {
+            self.nick = String::from(line.split_at(5).1)
+        }
     }
 }
