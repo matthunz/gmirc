@@ -1,0 +1,6 @@
+[package]
+name = "gmirc"
+version = "0.1.0"
+authors = ["matthunz <matthunz2@gmail.com>"]
+
+[dependencies]
