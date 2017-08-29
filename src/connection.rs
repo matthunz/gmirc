@@ -15,11 +15,6 @@ pub struct Connection {
 
 impl Connection {
     pub fn new(stream: TcpStream) -> Connection {
-        thread::spawn(move || {
-            let mut client = Client::new();
-            client.run();
-        });
-
         Connection {
             stream: stream,
             nick: String::new(),
@@ -32,6 +27,13 @@ impl Connection {
     pub fn run(&mut self) {
         let mut buffer = BufReader::new(self.stream.try_clone().unwrap());
         let (tx, rx) = mpsc::channel();
+        let client_tx = tx.clone();
+
+        thread::spawn(move || {
+            let mut client = Client::new(client_tx);
+            client.run();
+        });
+
 
         thread::spawn(move || {
             loop {
@@ -46,7 +48,11 @@ impl Connection {
                         msg.truncate(new_len);
 
                         println!("Received data ({} bytes): {}", bytes, msg);
-                        tx.send(msg).expect("Could not send to tx");
+                        let json = json!({
+                            "type": "irc",
+                            "msg": msg
+                        });
+                        tx.send(json).expect("Could not send to tx");
                     }
                     Err(_) => println!("Error receiving data")
                 }
@@ -54,8 +60,14 @@ impl Connection {
         });
 
         loop {
-            let msg = rx.recv().expect("Could not read rx");
-            self.parse_command(&msg);
+            let json = rx.recv().expect("Could not read rx");
+            if json["type"] == "irc" {
+                let msg = json["msg"].as_str().unwrap();
+                self.parse_command(&msg);
+            } else {
+                let data = &json[1]["data"];
+                println!("{:?}", data);
+            }
         }
     }
 
@@ -81,7 +93,7 @@ impl Connection {
             let msg = format!("332 {0} {1} :topic", self.nick, channel);
             self.send_command(&msg);
 
-            let msg = format!(":{0}!{1} JOIN {2}\r\n",
+            let msg = format!(":{0}!{1} JOIN {2}",
                               self.nick, self.hostname, channel);
             self.send_message(&msg);
 
