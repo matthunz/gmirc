@@ -3,6 +3,7 @@ extern crate serde_json;
 
 mod connection;
 mod client;
+mod token;
 
 use std::net::TcpListener;
 use std::thread;
