@@ -1,6 +1,9 @@
 use std::io::BufReader;
 use std::io::prelude::*;
 use std::net::TcpStream;
+use std::sync::mpsc;
+use std::thread;
+use client::Client;
 
 pub struct Connection {
     stream: TcpStream,
@@ -12,6 +15,11 @@ pub struct Connection {
 
 impl Connection {
     pub fn new(stream: TcpStream) -> Connection {
+        thread::spawn(move || {
+            let mut client = Client::new();
+            client.run();
+        });
+
         Connection {
             stream: stream,
             nick: String::new(),
@@ -22,24 +30,32 @@ impl Connection {
     }
 
     pub fn run(&mut self) {
-        loop {
-            let mut buffer = BufReader::new(self.stream.try_clone().unwrap());
-            let mut msg = String::new();
+        let mut buffer = BufReader::new(self.stream.try_clone().unwrap());
+        let (tx, rx) = mpsc::channel();
 
-            match buffer.read_line(&mut msg) {
-                Ok(bytes) => {
-                    if bytes == 0 { break; }
+        thread::spawn(move || {
+            loop {
+                let mut msg = String::new();
 
-                    // remove \r\n
-                    let new_len = msg.len() - 2;
-                    msg.truncate(new_len);
+                match buffer.read_line(&mut msg) {
+                    Ok(bytes) => {
+                        if bytes == 0 { break; }
 
-                    println!("Received data ({} bytes): {}", bytes, msg); 
-                    self.parse_command(&msg);
-                } 
-                Err(_) => println!("Error receiving data")
+                        // remove \r\n
+                        let new_len = msg.len() - 2;
+                        msg.truncate(new_len);
+
+                        println!("Received data ({} bytes): {}", bytes, msg);
+                        tx.send(msg).expect("Could not send to tx");
+                    }
+                    Err(_) => println!("Error receiving data")
+                }
             }
+        });
 
+        loop {
+            let msg = rx.recv().expect("Could not read rx");
+            self.parse_command(&msg);
         }
     }
 
