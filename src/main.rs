@@ -1,16 +1,24 @@
+#[macro_use]
+extern crate serde_json;
+
+mod connection;
+mod client;
+
 use std::net::TcpListener;
 use std::thread;
 use connection::Connection;
-
-mod connection;
+use client::Client;
 
 fn main() {
+    let mut client = Client::new();
+    client.run();
+
     let listener = TcpListener::bind("127.0.0.1:6667").unwrap();
 
     for stream in listener.incoming() {
         thread::spawn(move || {
-            let mut c = Connection::new(stream.unwrap());
-            c.run();
+            let mut conn = Connection::new(stream.unwrap());
+            conn.run();
         });
     }
 }
