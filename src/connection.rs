@@ -65,8 +65,15 @@ impl Connection {
                 let msg = json["msg"].as_str().unwrap();
                 self.parse_command(&msg);
             } else {
-                let data = &json[1]["data"];
-                println!("{:?}", data);
+                let subject = &json[1]["data"]["subject"];
+                let name = subject["name"]
+                    .as_str()
+                    .and_then(|n| { Some(n.replace(" ", "_" )) })
+                    .unwrap_or_default();
+                let text = subject["text"].as_str().unwrap_or_default();
+
+                let msg = format!(":{} PRIVMSG #test :{}", name, text);
+                self.send_message(&msg);
             }
         }
     }
@@ -103,15 +110,15 @@ impl Connection {
         }
     }
 
-    fn send_command(&mut self, msg: &str) {
-        let msg = format!(":gmirc {}", msg);
-        self.send_message(&msg);
-    }
-
     fn send_message(&mut self, msg: &str) {
         let msg = format!("{}\r\n", msg);
 
         println!("Sent: {:?}", msg);
         self.stream.write(msg.as_bytes()).unwrap();
+    }
+
+    fn send_command(&mut self, msg: &str) {
+        let msg = format!(":gmirc {}", msg);
+        self.send_message(&msg);
     }
 }
