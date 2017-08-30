@@ -6,6 +6,28 @@ use self::hyper::header::{ContentType};
 use serde_json::Value;
 use std::sync::mpsc::Sender;
 
+pub fn post_json(url: &str, body: Value) -> Option<Value> {
+    let client = reqwest::Client::new().unwrap();
+    let res = client.post(url)
+        .unwrap()
+        .header(ContentType::json())
+        .body(body.to_string())
+        .send();
+
+    match res {
+        Ok(res) => {
+            let mut res = res;
+            let json: Value = res.json().expect("GroupMe returned invalid json");
+            Some(json)
+        }
+        Err(_) => None
+    }
+}
+
+fn post_faye(body: Value) -> Option<Value> {
+    post_json("https://push.groupme.com/faye", body)
+}
+
 pub struct Client {
     client_id: String,
     tx: Sender<Value>,
@@ -30,24 +52,6 @@ impl Client {
         self.poll_data();
     }
 
-    fn post_json(&mut self, body: Value) -> Option<Value> {
-        let client = reqwest::Client::new().unwrap();
-        let res = client.post("https://push.groupme.com/faye")
-            .unwrap()
-            .header(ContentType::json())
-            .body(body.to_string())
-            .send();
-
-        match res {
-            Ok(res) => {
-                let mut res = res;
-                let json: Value = res.json().expect("GroupMe returned invalid json");
-                Some(json)
-            }
-            Err(_) => None
-        }
-    }
-
     fn get_user_id(&mut self) -> String {
         let url = format!("https://api.groupme.com/v3/users/me?token={}", ::token::TOKEN);
         let mut res = reqwest::get(&url).expect("Error connecting to GroupMe");
@@ -64,7 +68,7 @@ impl Client {
             "id": "1"
         });
 
-        self.post_json(body).unwrap()[0]["clientId"].as_str().expect("Recieved invalid response").to_owned()
+        post_faye(body).unwrap()[0]["clientId"].as_str().expect("Recieved invalid response").to_owned()
     }
 
     fn get_groups(&mut self) {
@@ -99,7 +103,7 @@ impl Client {
             }
         });
 
-        if !self.post_json(body).unwrap()[0]["successful"].as_bool().unwrap() {
+        if !post_faye(body).unwrap()[0]["successful"].as_bool().unwrap() {
             panic!("User subscription failed")
         }
     }
@@ -113,7 +117,7 @@ impl Client {
                 "id":"3"
             });
 
-            match self.post_json(body) {
+            match post_faye(body) {
                 Some(json) => {
                     let msg = json!({
                         "type": "event",

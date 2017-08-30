@@ -4,6 +4,7 @@ use std::io::prelude::*;
 use std::net::TcpStream;
 use std::sync::mpsc;
 use std::thread;
+use client;
 use client::Client;
 
 pub struct Connection {
@@ -79,21 +80,28 @@ impl Connection {
                     let id =  json["id"].as_str().unwrap().to_owned();
                     let name = json["name"].as_str().unwrap().to_owned();
 
-                    self.channels.insert(id, name);
+                    self.channels.insert(name, id);
                 }
                 _ => {
                     let subject = &json["subject"];
                     let group_id = subject["group_id"].as_str().unwrap_or_default();
 
-                    if let Some(group_name) = self.channels.clone().get(group_id) {
+                    let channels = self.channels.clone();
+                    let channel = channels.iter().filter(|c| {
+                        let &(_name, id) = c;
+                        id == group_id
+                    }).next();
+
+                    if let Some(channel) = channel {
                         let name = subject["name"]
                             .as_str()
                             .and_then(|n| { Some(n.replace(" ", "_" )) })
                             .unwrap_or_default();
                         let text = subject["text"].as_str().unwrap_or_default();
 
-                        let msg = format!(":{} PRIVMSG {} :{}", name, group_name, text);
+                        let msg = format!(":{} PRIVMSG {} :{}", name, channel.0, text);
                         self.send_message(&msg);
+
                     }
                 }
             }
@@ -111,23 +119,17 @@ impl Connection {
             self.hostname = tokens[2].to_owned();
 
         } else if line.contains("JOIN") {
-            let channel_name = line.split_at(5).1.to_owned();
+            let channel_name = line.split_at(5).1;
 
-            let channels = self.channels.clone();
-            let mut filter = channels.iter().filter(|c| {
-                let &(id, name) = c;
-                name == &channel_name
-            });
+            match self.channels.clone().get(channel_name) {
+                Some(_) => {
+                    self.joined.push(channel_name.to_owned());
 
-            match filter.next() {
-                Some(channel) => {
-                    self.joined.push(channel.0.clone());
-
-                    let msg = format!("332 {0} {1} :topic", self.nick, channel.1);
+                    let msg = format!("332 {0} {1} :topic", self.nick, channel_name);
                     self.send_command(&msg);
 
                     let msg = format!(":{0}!{1} JOIN {2}",
-                                      self.nick, self.hostname, channel.1);
+                                      self.nick, self.hostname, channel_name);
                     self.send_message(&msg);
                 }
                 None => {
@@ -140,6 +142,31 @@ impl Connection {
         } else if line.contains("PING") {
             let msg = format!("PONG {}", line.split_at(5).1);
             self.send_message(&msg);
+
+        } else if line.contains("PRIVMSG") {
+            let mut tokens: Vec<&str> = line.split_terminator(' ').collect();
+            tokens.remove(0);
+
+            match self.channels.clone().get(tokens.remove(0)) {
+                Some(channel_id) => {
+                    let mut msg = tokens.join(" ");
+                    msg.remove(0); // remove :
+
+                    let url = format!("{}/groups/{}/messages?token={}", ::BASE_URL, channel_id, ::token::TOKEN);
+                    let json = json!({
+                        "message": {
+                            "text": msg
+                        }
+                    });
+
+                    if let Some(_) = client::post_json(&url, json) {
+                        self.send_command("404 :Sending message to GroupMe failed");
+                    };
+                }
+                None => {
+                    self.send_command("404 :Channel does not exist");
+                }
+            } 
         }
     }
 
