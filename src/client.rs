@@ -25,6 +25,7 @@ impl Client {
         self.user_id = self.get_user_id();
         self.client_id = self.get_client_id();
 
+        self.get_groups();
         self.subscribe_user();
         self.poll_data();
     }
@@ -66,6 +67,22 @@ impl Client {
         self.post_json(body).unwrap()[0]["clientId"].as_str().expect("Recieved invalid response").to_owned()
     }
 
+    fn get_groups(&mut self) {
+        let url = format!("https://api.groupme.com/v3/groups?token={}", ::token::TOKEN);
+        let json: Value = reqwest::get(&url)
+            .expect("Error getting groups from groupme")
+            .json()
+            .expect("Groupme returned invalid json");
+
+        for group in json["response"].as_array().unwrap() {
+            self.tx.send(json!({
+                "type": "group",
+                "id": group["group_id"].as_str().unwrap(),
+                "name": "#".to_owned() + &group["name"].as_str().unwrap().replace(" ", "_")
+            })).expect("Error sending to tx pipe");
+        }
+    }
+
     fn subscribe_user(&mut self) {
         let body = json!({
             "channel": "/meta/subscribe",
@@ -94,7 +111,11 @@ impl Client {
 
             match self.post_json(body) {
                 Some(json) => {
-                    self.tx.send(json).expect("Error sending tx");
+                    let msg = json!({
+                        "type": "event",
+                        "subject": json[1]["data"]["subject"]
+                    });
+                    self.tx.send(msg).expect("Error sending tx");
                 }
                 None => { continue; }
             };
