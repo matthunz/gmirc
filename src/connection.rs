@@ -76,6 +76,9 @@ impl Connection {
                     let msg = json["msg"].as_str().unwrap();
                     self.parse_command(&msg);
                 }
+                "user" => {
+                    self.nick = json["name"].as_str().unwrap().to_owned().replace(" ", "_")
+                }
                 "group" => {
                     let id =  json["id"].as_str().unwrap().to_owned();
                     let name = json["name"].as_str().unwrap().to_owned();
@@ -109,10 +112,7 @@ impl Connection {
     }
 
     fn parse_command(&mut self, line: &str) {
-        if line.contains("NICK") {
-            self.nick = line.split_at(5).1.to_owned();
-
-        } else if line.contains("USER") {
+        if line.contains("USER") {
             let tokens:  Vec<&str> = line.split(" ").collect();
 
             self.user = tokens[1].to_owned();

@@ -55,8 +55,13 @@ impl Client {
     fn get_user_id(&mut self) -> String {
         let url = format!("https://api.groupme.com/v3/users/me?token={}", ::token::TOKEN);
         let mut res = reqwest::get(&url).expect("Error connecting to GroupMe");
-
         let json: Value = res.json().expect("GroupMe returned invalid json");
+
+        self.tx.send(json!({
+            "type": "user",
+            "name": json["response"]["name"].as_str().unwrap()
+        })).unwrap();
+
         json["response"]["id"].as_str().unwrap().to_owned()
     }
 
