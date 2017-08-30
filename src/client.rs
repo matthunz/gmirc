@@ -81,6 +81,10 @@ impl Client {
                 "name": "#".to_owned() + &group["name"].as_str().unwrap().replace(" ", "_")
             })).expect("Error sending to tx pipe");
         }
+
+        self.tx.send(json!({
+            "type": "welcome"
+        })).expect("Error sending to tx pipe");
     }
 
     fn subscribe_user(&mut self) {

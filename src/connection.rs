@@ -65,6 +65,12 @@ impl Connection {
         loop {
             let json = rx.recv().expect("Could not read rx");
             match json["type"].as_str().unwrap() {
+                "welcome" => {
+                    let msg = format!("001 {0} :Welcome! {0}[!{1}@{2}]",
+                                      self.nick, self.user, self.hostname);
+                    self.send_command(&msg);
+
+                }
                 "irc" => {
                     let msg = json["msg"].as_str().unwrap();
                     self.parse_command(&msg);
@@ -103,11 +109,6 @@ impl Connection {
 
             self.user = tokens[1].to_owned();
             self.hostname = tokens[2].to_owned();
-
-            // welcome the newly defined user
-            let msg = format!("001 {0} :Welcome! <{0}>[!<{1}>@<{2}>]",
-                              self.nick, self.user, self.hostname);
-            self.send_command(&msg);
 
         } else if line.contains("JOIN") {
             let channel_name = line.split_at(5).1.to_owned();
